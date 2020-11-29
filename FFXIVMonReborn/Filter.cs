@@ -21,13 +21,14 @@ namespace FFXIVMonReborn
         Float,
         Double,
         ByteArray,
+        IsForSelf,
     }
 
     public class Filter
     {
         public static Dictionary<string, string> Help = new Dictionary<string, string>
         {
-            {"[Number]", "Opcode to search for by id(0x prefix for hex)." },
+            {"[Number]", "Opcode to search for by id(0x prefix for hex). For inverse filtering put ! at begining (!number;)." },
             {"_A(ActorControlNumber);", "ActorControl id to search for(0x prefix for hex)."},
             {"_AN(ActorControlName);", "ActorControl name to search for."},
             {"_S(String);", "String to search packet contents for."},
@@ -39,6 +40,7 @@ namespace FFXIVMonReborn
             {"_F(float);", "Float to search packet contents for, number parameter."},
             {"_D(double);", "Double to search packet contents for, number parameter."},
             {"_B(AA BB CC DD);", "Byte array to search packet contents for, hexadecimal without 0x prefix. Must be pairs of two." },
+            {"_IFS([u]int);","Filters on IsForSelf flag using Int32/UInt32 to determine which to include (1 for true, 0 for false)." },
         };
 
         public static bool IsValidFilter(string input)
@@ -154,6 +156,13 @@ namespace FFXIVMonReborn
                     string vstring = thisFilter.Substring("_B(".Length, thisFilter.IndexOf(')', "_B(".Length) - "_B(".Length);
                     value = vstring;
                 }
+                // _IFS([u]int)
+                else if (thisFilter.Substring(0, "_IFS(".Length) == "_IFS(")
+                {
+                    type = FilterType.IsForSelf;
+                    string vstring = thisFilter.Substring("_IFS(".Length, thisFilter.IndexOf(')', "_IFS(".Length) - "_IFS(".Length);
+                    value = vstring;
+                }
                 else
                 {
                     type = FilterType.Message;
@@ -191,6 +200,12 @@ namespace FFXIVMonReborn
                         var valStr = (string)value;
                         string[] split;
                         NumberStyles styles = NumberStyles.Any;
+                        bool invertSelection = false;
+
+                        if (valStr[0] == '!')
+                        {
+                                invertSelection = true;
+                        }
 
                         if ((split = valStr.Split('x')).Length > 1)
                         {
@@ -207,7 +222,14 @@ namespace FFXIVMonReborn
                         {
                             for (var i = 0; i + sizeof(UInt16) - 1 < item.Data.Length; ++i)
                             {
-                                return item.Message == findUInt16.ToString("X4");
+                                if (!invertSelection)
+                                {
+                                    return item.Message == findUInt16.ToString("X4");
+                                }
+                                else
+                                {
+                                    return item.Message != findUInt16.ToString("X4");
+                                }
                             }
                         }
                     }
@@ -455,6 +477,21 @@ namespace FFXIVMonReborn
                                     if (isMatch)
                                         return true;
                                 }
+                            }
+                        }
+                        break;
+                    case FilterType.IsForSelf:
+                        {
+                            var valStr = (string)value;
+                            NumberStyles styles = NumberStyles.Any;
+
+                            if (Int32.TryParse(valStr, styles, CultureInfo.CurrentCulture, out var matchInt32))
+                            {
+                                return Convert.ToInt32(item.IsForSelf) == matchInt32;
+                            }
+                            if (UInt32.TryParse(valStr, styles, CultureInfo.CurrentCulture, out var matchUInt32))
+                            {
+                                return Convert.ToInt32(item.IsForSelf) == matchUInt32;
                             }
                         }
                         break;
